@@ -9,22 +9,39 @@
       "name": "input_reads",
       "label": "Aligned BAM or CRAM",
       "class": "file",
-      "patterns": ["*.bam", "*.cram"],
+      "patterns": [
+        "*.bam",
+        "*.cram"
+      ],
       "help": "All reads are streamed to FASTQ; no index needed."
     },
     {
       "name": "deacon_index",
       "label": "deacon index",
       "class": "file",
-      "patterns": ["*.idx"],
-      "help": "deacon minimizer index (panhuman-1.k31w15.idx, format v3). Upload once per project/region."
+      "patterns": [
+        "*.idx"
+      ],
+      "help": "deacon minimizer index (panhuman-1.k31w15.idx, format v3). Upload once per project/region. Defaults to panhuman-1.k31w15.idx in PedPanCancer-Microbiome:/reference/deacon/.",
+      "default": {
+        "$dnanexus_link": {
+          "project": "project-Gyb32789p9Jgkp90zfvfQYz9",
+          "id": "file-JFqjQbQ9p9JVQfZB41kKZfvk"
+        }
+      }
     },
     {
       "name": "reference",
       "label": "Reference FASTA (CRAM only)",
       "class": "file",
       "optional": true,
-      "patterns": ["*.fa", "*.fasta", "*.fa.gz", "*.fasta.gz", "*.fna"]
+      "patterns": [
+        "*.fa",
+        "*.fasta",
+        "*.fa.gz",
+        "*.fasta.gz",
+        "*.fna"
+      ]
     },
     {
       "name": "output_prefix",
@@ -32,15 +49,53 @@
       "optional": true,
       "help": "Defaults to the input name without .bam/.cram"
     },
-    {"name": "abs_threshold", "class": "int", "default": 2},
-    {"name": "rel_threshold", "class": "float", "default": 0.01}
+    {
+      "name": "abs_threshold",
+      "class": "int",
+      "default": 2
+    },
+    {
+      "name": "rel_threshold",
+      "class": "float",
+      "default": 0.01
+    }
   ],
   "outputSpec": [
-    {"name": "r1", "class": "file", "patterns": ["*.host_depleted.R1.fq.gz"]},
-    {"name": "r2", "class": "file", "patterns": ["*.host_depleted.R2.fq.gz"]},
-    {"name": "unpaired", "class": "file", "patterns": ["*.host_depleted.unpaired.fq.gz"]},
-    {"name": "deacon_summaries", "class": "array:file", "patterns": ["*.json"]},
-    {"name": "stats", "class": "file", "patterns": ["*.depletion_stats.tsv"]}
+    {
+      "name": "r1",
+      "class": "file",
+      "patterns": [
+        "*.host_depleted.R1.fq.gz"
+      ]
+    },
+    {
+      "name": "r2",
+      "class": "file",
+      "patterns": [
+        "*.host_depleted.R2.fq.gz"
+      ]
+    },
+    {
+      "name": "unpaired",
+      "class": "file",
+      "patterns": [
+        "*.host_depleted.unpaired.fq.gz"
+      ]
+    },
+    {
+      "name": "deacon_summaries",
+      "class": "array:file",
+      "patterns": [
+        "*.json"
+      ]
+    },
+    {
+      "name": "stats",
+      "class": "file",
+      "patterns": [
+        "*.depletion_stats.tsv"
+      ]
+    }
   ],
   "runSpec": {
     "interpreter": "bash",
@@ -48,16 +103,30 @@
     "distribution": "Ubuntu",
     "release": "24.04",
     "version": "0",
-    "timeoutPolicy": {"main": {"hours": 24}},
+    "timeoutPolicy": {
+      "main": {
+        "hours": 24
+      }
+    },
     "restartableEntryPoints": "all"
   },
-  "access": {"network": []},
+  "access": {
+    "network": []
+  },
   "regionalOptions": {
     "azure:westus": {
-      "systemRequirements": {"main": {"instanceType": "azure:mem1_ssd1_x16"}}
+      "systemRequirements": {
+        "main": {
+          "instanceType": "azure:mem2_ssd1_x16"
+        }
+      }
     },
     "aws:us-east-1": {
-      "systemRequirements": {"main": {"instanceType": "mem1_ssd1_v2_x16"}}
+      "systemRequirements": {
+        "main": {
+          "instanceType": "mem2_ssd1_v2_x16"
+        }
+      }
     }
   }
 }

@@ -64,8 +64,7 @@ dx run deacon_host_depletion -iinput_reads=file-xxx -ideacon_index=file-yyy --de
 # Batch: dx run deacon_host_depletion --batch-tsv batch.tsv -ideacon_index=file-yyy
 ```
 
-Default instance: `azure:mem1_ssd1_x16` (`azure:westus`) or `mem1_ssd1_v2_x16` (`aws:us-east-1`).
-Confirm the local disk is larger than the biggest BAM plus collate temp space before running at scale.
+Default instance: `azure:mem2_ssd1_x16` (16 cores, 56 GB, 512 GB disk). The job checks free disk before downloading (input × 1.3) and fails fast; BAMs over ~390 GB need `--instance-type azure:mem4_ssd1_x32`.
 
 ## Cavatica
 

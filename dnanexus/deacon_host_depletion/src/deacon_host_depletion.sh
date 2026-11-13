@@ -17,6 +17,13 @@ main() {
 
     # --- inputs ---
     in_name=$(dx describe --name "$input_reads")
+    # Need room for the input plus collate temp files / outputs; fail fast instead of mid-run.
+    in_bytes=$(dx describe "$input_reads" --json | python3 -c 'import json,sys; print(json.load(sys.stdin)["size"])')
+    free_bytes=$(df --output=avail -B1 "$work" | tail -1)
+    if (( in_bytes * 13 / 10 > free_bytes )); then
+        dx-jobutil-report-error "Input is $((in_bytes/1000000000)) GB but only $((free_bytes/1000000000)) GB free; rerun with a larger --instance-type (e.g. azure:mem4_ssd1_x32)." AppError
+        exit 1
+    fi
     dx download "$input_reads" -o "$work/in/$in_name"
     dx download "$deacon_index" -o "$work/in/deacon.idx"
     ref_opt=()
