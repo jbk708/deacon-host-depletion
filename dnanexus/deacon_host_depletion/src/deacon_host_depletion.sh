@@ -8,7 +8,9 @@ main() {
     # --- tools ---
     mkdir -p /opt/deacon-env
     tar -xzf /opt/deacon-env.tar.gz -C /opt/deacon-env
-    /opt/deacon-env/bin/conda-unpack
+    # conda-unpack's shebang is `/usr/bin/env python`, but Ubuntu 24.04 workers only ship python3,
+    # so invoke it with the env's own interpreter.
+    /opt/deacon-env/bin/python /opt/deacon-env/bin/conda-unpack
     export PATH=/opt/deacon-env/bin:$PATH
     deacon --version; samtools --version | head -1
 
