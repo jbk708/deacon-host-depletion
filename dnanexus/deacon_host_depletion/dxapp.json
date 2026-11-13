@@ -3,7 +3,7 @@
   "title": "deacon host depletion (BAM/CRAM -> host-depleted FASTQ)",
   "summary": "Extract all reads from a BAM/CRAM, re-pair mates, and remove host reads with deacon",
   "dxapi": "1.0.0",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "inputSpec": [
     {
       "name": "input_reads",

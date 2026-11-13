@@ -25,7 +25,16 @@ def pairs(g, tag, n, L=150, ins=350):
 reads = pairs(host, "HOST", 5000) + pairs(microbe, "MICROBE", 2000)
 q = "I" * 150
 with open("r.sam", "w") as fh:
-    fh.write("@HD\tVN:1.6\tSO:unsorted\n@SQ\tSN:ref\tLN:1000000\n")
+    fh.write("@HD\tVN:1.6\tSO:unsorted\n@SQ\tSN:ref\tLN:1000000\n@SQ\tSN:chrEBV\tLN:171823\n")
+    # Viral reads the aligner placed on chrEBV (both mates, or one mate): must survive.
+    for i, (name, r1, r2) in enumerate(pairs(microbe, "EBVBOTH", 200)):
+        p = 1000 + i * 10
+        fh.write(f"{name}\t99\tchrEBV\t{p}\t60\t150M\t=\t{p+200}\t350\t{r1}\t{q}\n")
+        fh.write(f"{name}\t147\tchrEBV\t{p+200}\t60\t150M\t=\t{p}\t-350\t{r2}\t{q}\n")
+    for i, (name, r1, r2) in enumerate(pairs(microbe, "EBVONE", 100)):
+        p = 1000 + i * 10
+        fh.write(f"{name}\t97\tchrEBV\t{p}\t60\t150M\tref\t{p}\t0\t{r1}\t{q}\n")
+        fh.write(f"{name}\t145\tref\t{p}\t60\t150M\tchrEBV\t{p}\t0\t{r2}\t{q}\n")
     for name, r1, r2 in reads:
         fh.write(f"{name}\t77\t*\t0\t0\t*\t*\t0\t0\t{r1}\t{q}\n")
         fh.write(f"{name}\t141\t*\t0\t0\t*\t*\t0\t0\t{r2}\t{q}\n")
@@ -70,8 +79,11 @@ echo "alignment filter: both-mapped kept=$bm/500 | half-mapped kept R1=$hm1 R2=$
 check "both-mapped pairs removed by alignment filter" "[ $bm -eq 0 ]"
 check "half-mapped pairs kept as pairs"       "[ $hm1 -eq 400 ] && [ $hm2 -eq 400 ]"
 read -r prim alnrm < <(awk -F'\t' 'NR==2{print $2, $3}' out/t.depletion_stats.tsv)
-# primary reads: 2*(5000+2000+500+400) + 400 singletons = 16200; supplementary excluded
-check "primary reads counted (16200)"         "[ $prim -eq 16200 ]"
+# primary reads: 2*(5000+2000+500+400+200+100) + 400 singletons = 16800; supplementary excluded
+check "primary reads counted (16800)"         "[ $prim -eq 16800 ]"
+eb=$(count $r1 EBVBOTH); e1=$(count $r1 EBVONE); e2=$(count $r2 EBVONE)
+echo "non-host contigs: chrEBV both-mapped kept=$eb/200 | one-mate-on-EBV kept R1=$e1 R2=$e2 /100"
+check "chrEBV pairs survive alignment filter" "[ $eb -eq 200 ] && [ $e1 -eq 100 ] && [ $e2 -eq 100 ]"
 check "aln_removed = both-mapped reads (1000)" "[ $alnrm -eq 1000 ]"
 
 deplete_host.sh -A -i test.bam -x host.idx -p noaln -o out_noaln -t 4 2> run_noaln.log

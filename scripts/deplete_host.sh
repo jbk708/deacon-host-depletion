@@ -37,16 +37,20 @@ Usage: $(basename "$0") -i INPUT.(bam|cram) -x INDEX.idx -p PREFIX [options]
   -R  deacon --rel-threshold                [0.01]
   -T  temp directory for samtools collate   [OUTDIR/tmp]
   -A  disable the alignment filter (deplete with deacon only)
+  -N  comma-separated NON-host contigs: reads mapped to these (or whose mate is) count as
+      unmapped for the alignment filter      [$NONHOST]
 EOF
   exit 2
 }
 
+# Non-human sequences bundled in common human references (GRCh38 analysis sets carry chrEBV).
+NONHOST="chrEBV,EBV,NC_007605,NC_007605.1,chrphiX,phiX,phiX174,NC_001422,NC_001422.1"
 INPUT="" INDEX="" PREFIX="" OUTDIR="." REF="" THREADS="$(nproc)" ABS=2 REL=0.01 TMPD="" ALN_FILTER=1
-while getopts "i:x:p:o:r:t:a:R:T:Ah" opt; do
+while getopts "i:x:p:o:r:t:a:R:T:AN:h" opt; do
   case $opt in
     i) INPUT=$OPTARG ;; x) INDEX=$OPTARG ;; p) PREFIX=$OPTARG ;; o) OUTDIR=$OPTARG ;;
     r) REF=$OPTARG ;; t) THREADS=$OPTARG ;; a) ABS=$OPTARG ;; R) REL=$OPTARG ;;
-    T) TMPD=$OPTARG ;; A) ALN_FILTER=0 ;; *) usage ;;
+    T) TMPD=$OPTARG ;; A) ALN_FILTER=0 ;; N) NONHOST=$OPTARG ;; *) usage ;;
   esac
 done
 [[ -n $INPUT && -n $INDEX && -n $PREFIX ]] || usage
@@ -79,8 +83,19 @@ samtools quickcheck -u -v "$INPUT" || { echo "ERROR: samtools quickcheck failed 
 # 2) collate mates (fast mode), 3) FASTQ, 4) deacon deplete.
 #    samtools fastq: paired READ1/READ2 -> stdout (interleaved, /1 /2 suffixes),
 #    singletons -> -s, reads flagged neither/both READ1/READ2 -> -0.
+#    Reads (or mates) on non-host contigs (e.g. chrEBV) are treated as unmapped, so viral reads
+#    the aligner placed on them survive to deacon. Both mates evaluate identically
+#    (rname/rnext swap), so pairs stay intact.
 ALN_EXPR='1'
-[[ $ALN_FILTER == 1 ]] && ALN_EXPR='flag.unmap || flag.munmap'
+if [[ $ALN_FILTER == 1 ]]; then
+  ALN_EXPR='flag.unmap || flag.munmap'
+  IFS=',' read -ra _nh <<< "$NONHOST"
+  for c in "${_nh[@]}"; do
+    [[ $c =~ ^[A-Za-z0-9._|-]+$ ]] || { echo "ERROR: bad contig name in -N: $c" >&2; exit 1; }
+    ALN_EXPR+=" || rname == \"$c\" || rnext == \"$c\""
+  done
+fi
+log "alignment filter keeps: $ALN_EXPR"
 log "extracting + depleting paired reads"
 samtools view -@ "$THREADS" -u -F 0x900 "${REF_OPT[@]}" \
     --save-counts "$OUTDIR/$PREFIX.counts.primary.json" "$INPUT" \

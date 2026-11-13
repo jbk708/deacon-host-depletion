@@ -16,7 +16,7 @@ requirements:
   ShellCommandRequirement: {}
   InlineJavascriptRequirement: {}
   DockerRequirement:
-    dockerPull: ghcr.io/jbk708/deacon-host-depletion:0.2.0
+    dockerPull: ghcr.io/jbk708/deacon-host-depletion:0.2.1
   ResourceRequirement:
     coresMin: $(inputs.threads)
     ramMin: 32000
@@ -43,9 +43,26 @@ inputs:
     secondaryFiles:
       - pattern: .fai
         required: false
+    sbg:suggestedValue:
+      class: File
+      path: 615cd166ec5e113414f33c0d
+      name: Homo_sapiens_assembly38.fasta
   deacon_index:
     type: File
     doc: deacon minimizer index, e.g. panhuman-1.k31w15.idx (index format v3; deacon >= 0.11).
+    sbg:suggestedValue:
+      class: File
+      path: 6af798903a1a186bdfe417c8
+      name: panhuman-1.k31w15.idx
+  skip_alignment_filter:
+    type: boolean
+    default: false
+    doc: Deplete with deacon only (do not drop pairs whose mates were both mapped in the input).
+  non_host_contigs:
+    type: string?
+    doc: >-
+      Comma-separated contigs that are NOT host (reads mapped there are treated as unmapped by the
+      alignment filter). Default covers chrEBV and phiX names.
   output_prefix:
     type: string?
     doc: Output prefix; defaults to the input file's basename without extension.
@@ -71,6 +88,8 @@ arguments:
       -a $(inputs.abs_threshold)
       -R $(inputs.rel_threshold)
       $(inputs.reference ? "-r " + inputs.reference.path : "")
+      $(inputs.skip_alignment_filter ? "-A" : "")
+      $(inputs.non_host_contigs ? "-N '" + inputs.non_host_contigs + "'" : "")
       -T ./tmp
 
 outputs:

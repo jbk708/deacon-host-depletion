@@ -26,6 +26,12 @@ Steps: primary records (duplicates and QC-fail reads kept) → alignment filter 
 R1/R2 with mates kept in sync. Singletons (mate missing) and unpaired reads go through deacon
 separately. Use `-A` to skip the alignment filter and deplete on deacon alone.
 
+**Non-host contigs.** Some human references carry non-human sequence (the Kids First
+`Homo_sapiens_assembly38.fasta` used for CBTN CRAMs includes `chrEBV`). Reads, or mates of reads,
+mapped to these are treated as unmapped by the alignment filter, so they reach deacon instead of
+being discarded. Default: EBV and phiX contig names; override with `-N chrEBV,...`. The St. Jude
+`hg38m1x` reference has no non-human contigs.
+
 On a pilot germline WGS sample (SJAML030881_G1), deacon alone kept 1.05M read pairs the original
 alignment had placed on hg38 (human-like 42% GC, many homopolymers). The alignment filter removes
 those, and deacon removes 2.2M human pairs that `samtools -f 4` (unmapped-only) would have kept.
