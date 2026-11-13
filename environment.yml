@@ -1,0 +1,9 @@
+name: deacon-host-depletion
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - deacon=0.19.1
+  - samtools=1.25
+  - pigz=2.8
+  - python>=3.10
