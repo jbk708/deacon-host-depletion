@@ -16,7 +16,7 @@ requirements:
   ShellCommandRequirement: {}
   InlineJavascriptRequirement: {}
   DockerRequirement:
-    dockerPull: ghcr.io/jbk708/deacon-host-depletion:0.1.0
+    dockerPull: ghcr.io/jbk708/deacon-host-depletion:0.2.0
   ResourceRequirement:
     coresMin: $(inputs.threads)
     ramMin: 32000
@@ -85,7 +85,7 @@ outputs:
     outputBinding: {glob: "*.host_depleted.unpaired.fq.gz"}
   deacon_summaries:
     type: File[]
-    outputBinding: {glob: "*.deacon.*.json"}
+    outputBinding: {glob: "*.json"}
   stats:
     type: File
     outputBinding: {glob: "*.depletion_stats.tsv"}

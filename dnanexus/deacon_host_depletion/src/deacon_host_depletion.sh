@@ -55,7 +55,7 @@ main() {
     dx-jobutil-add-output r2 "$r2" --class=file
     dx-jobutil-add-output unpaired "$up" --class=file
     dx-jobutil-add-output stats "$st" --class=file
-    for j in "$work"/out/*.deacon.*.json; do
+    for j in "$work"/out/*.json; do
         dx-jobutil-add-output deacon_summaries "$(dx upload "$j" --brief)" --class=array:file
     done
 }

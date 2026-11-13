@@ -12,12 +12,23 @@ Both call the same script, `scripts/deplete_host.sh`.
 
 ## What it does
 
-1. Streams **all** reads (primary alignments, duplicates and QC-fail reads included) out of the
-   BAM/CRAM with `samtools collate -f | samtools fastq`, so depletion does not rely on the
-   original alignment.
-2. Pipes interleaved pairs into `deacon filter --deplete --interleaved --check-pairs`, which writes
-   R1/R2 files with mates kept in sync.
-3. Runs singletons (mate missing) and unpaired reads through deacon separately.
+A read pair is removed if **either** test says it is human:
+
+1. **Alignment filter:** the original alignment placed both mates on the reference
+   (`samtools view -e 'flag.unmap || flag.munmap'` keeps pairs with at least one unmapped mate).
+   This catches repetitive and low-complexity human reads that carry too few distinctive
+   minimizers for deacon.
+2. **deacon:** the pair matches the panhuman-1 minimizer index. This catches human sequence
+   missing from the alignment reference (pangenome / T2T regions).
+
+Steps: primary records (duplicates and QC-fail reads kept) → alignment filter →
+`samtools collate -f | samtools fastq` → `deacon filter --deplete --interleaved --check-pairs` →
+R1/R2 with mates kept in sync. Singletons (mate missing) and unpaired reads go through deacon
+separately. Use `-A` to skip the alignment filter and deplete on deacon alone.
+
+On a pilot germline WGS sample (SJAML030881_G1), deacon alone kept 1.05M read pairs the original
+alignment had placed on hg38 (human-like 42% GC, many homopolymers). The alignment filter removes
+those, and deacon removes 2.2M human pairs that `samtools -f 4` (unmapped-only) would have kept.
 
 Outputs per sample:
 
@@ -26,6 +37,7 @@ Outputs per sample:
 <prefix>.host_depleted.R2.fq.gz
 <prefix>.host_depleted.unpaired.fq.gz
 <prefix>.deacon.paired.json / .deacon.unpaired.json   # deacon summaries
+<prefix>.counts.primary.json / .counts.alignment_filter.json   # samtools read counts
 <prefix>.depletion_stats.tsv                          # sample, paired_in/out, unpaired_in/out, frac_kept
 ```
 

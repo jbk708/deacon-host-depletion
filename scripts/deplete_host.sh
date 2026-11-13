@@ -1,10 +1,17 @@
 #!/usr/bin/env bash
 # deplete_host.sh — stream an aligned BAM/CRAM to FASTQ and remove host reads with deacon.
 #
-# All reads are extracted (not just unmapped ones) so depletion does not depend on the
-# original alignment. Mates are re-paired with `samtools collate`, written as an
-# interleaved stream into `deacon filter --deplete`, and split into R1/R2 outputs.
-# Reads whose mate is absent (singletons) and unpaired reads are depleted separately.
+# A read pair is removed if EITHER
+#   (1) the original alignment placed both mates on the host reference (alignment filter), OR
+#   (2) deacon matches it to the host minimizer index (panhuman-1: HPRC + CHM13 + GRCh38).
+# (1) catches repetitive / low-complexity human reads that carry too few distinctive minimizers
+# for deacon; (2) catches human sequence absent from the alignment reference. A pair is kept by
+# (1) if at least one mate was unmapped; both mates share that decision, so pairs stay intact.
+# Disable (1) with -A to deplete on deacon alone.
+#
+# Surviving primary reads are re-paired with `samtools collate`, streamed interleaved into
+# `deacon filter --deplete`, and split into R1/R2. Singletons and unpaired reads are depleted
+# separately.
 #
 # Outputs (in OUTDIR):
 #   <prefix>.host_depleted.R1.fq.gz
@@ -29,16 +36,17 @@ Usage: $(basename "$0") -i INPUT.(bam|cram) -x INDEX.idx -p PREFIX [options]
   -a  deacon --abs-threshold                [2]
   -R  deacon --rel-threshold                [0.01]
   -T  temp directory for samtools collate   [OUTDIR/tmp]
+  -A  disable the alignment filter (deplete with deacon only)
 EOF
   exit 2
 }
 
-INPUT="" INDEX="" PREFIX="" OUTDIR="." REF="" THREADS="$(nproc)" ABS=2 REL=0.01 TMPD=""
-while getopts "i:x:p:o:r:t:a:R:T:h" opt; do
+INPUT="" INDEX="" PREFIX="" OUTDIR="." REF="" THREADS="$(nproc)" ABS=2 REL=0.01 TMPD="" ALN_FILTER=1
+while getopts "i:x:p:o:r:t:a:R:T:Ah" opt; do
   case $opt in
     i) INPUT=$OPTARG ;; x) INDEX=$OPTARG ;; p) PREFIX=$OPTARG ;; o) OUTDIR=$OPTARG ;;
     r) REF=$OPTARG ;; t) THREADS=$OPTARG ;; a) ABS=$OPTARG ;; R) REL=$OPTARG ;;
-    T) TMPD=$OPTARG ;; *) usage ;;
+    T) TMPD=$OPTARG ;; A) ALN_FILTER=0 ;; *) usage ;;
   esac
 done
 [[ -n $INPUT && -n $INDEX && -n $PREFIX ]] || usage
@@ -59,18 +67,25 @@ log() { echo "[$(date '+%F %T')] $*" >&2; }
 
 for t in samtools deacon; do command -v $t >/dev/null || { echo "ERROR: $t not on PATH" >&2; exit 1; }; done
 log "samtools $(samtools --version | head -1 | cut -d' ' -f2), $(deacon --version)"
-log "input=$INPUT index=$INDEX threads=$THREADS abs=$ABS rel=$REL"
+log "input=$INPUT index=$INDEX threads=$THREADS abs=$ABS rel=$REL alignment_filter=$ALN_FILTER"
 
 # Fail fast on obviously broken inputs (missing EOF block etc.); -u allows unaligned BAMs (no @SQ)
 samtools quickcheck -u -v "$INPUT" || { echo "ERROR: samtools quickcheck failed for $INPUT" >&2; exit 1; }
 
-# 1) collate mates (fast mode: primary alignments only), 2) FASTQ, 3) deacon deplete.
+# 0) primary records only (-F 0x900: no secondary/supplementary, so each read appears once);
+#    duplicates and QC-fail reads are kept on purpose (microbial reads are often flagged as dups).
+#    Counts of primary reads and of reads dropped by the alignment filter go to JSON.
+# 1) alignment filter: keep a record only if it or its mate is unmapped.
+# 2) collate mates (fast mode), 3) FASTQ, 4) deacon deplete.
 #    samtools fastq: paired READ1/READ2 -> stdout (interleaved, /1 /2 suffixes),
 #    singletons -> -s, reads flagged neither/both READ1/READ2 -> -0.
-#    Default -F 0x900 drops secondary/supplementary so each read appears once; duplicates
-#    and QC-fail reads are kept on purpose (microbial reads are often flagged as dups).
+ALN_EXPR='1'
+[[ $ALN_FILTER == 1 ]] && ALN_EXPR='flag.unmap || flag.munmap'
 log "extracting + depleting paired reads"
-samtools collate -@ "$THREADS" -f -r 100000 -O -u "${REF_OPT[@]}" "$INPUT" "$TMPD/collate" \
+samtools view -@ "$THREADS" -u -F 0x900 "${REF_OPT[@]}" \
+    --save-counts "$OUTDIR/$PREFIX.counts.primary.json" "$INPUT" \
+  | samtools view -u -e "$ALN_EXPR" --save-counts "$OUTDIR/$PREFIX.counts.alignment_filter.json" - \
+  | samtools collate -@ "$THREADS" -f -r 100000 -O -u - "$TMPD/collate" \
   | samtools fastq -@ "$THREADS" "${REF_OPT[@]}" \
       -s "$TMPD/singletons.fq.gz" -0 "$TMPD/other.fq.gz" - \
   | deacon filter --deplete --interleaved --check-pairs \
@@ -87,23 +102,29 @@ zcat "$TMPD/singletons.fq.gz" "$TMPD/other.fq.gz" \
 
 rm -rf "$TMPD"
 
-# One-line stats table (reads, not pairs; paired counts include both mates)
-python3 - "$PREFIX" "$OUTDIR/$PREFIX.deacon.paired.json" "$OUTDIR/$PREFIX.deacon.unpaired.json" \
-  > "$OUTDIR/$PREFIX.depletion_stats.tsv" <<'PY'
+# One-line stats table, in reads (paired counts include both mates):
+#   primary_reads        primary records in the input
+#   aln_removed          removed by the alignment filter (both mates mapped)
+#   paired_in/out        into / out of deacon (paired);  unpaired_in/out likewise
+#   frac_kept            (paired_out + unpaired_out) / primary_reads
+python3 - "$PREFIX" "$OUTDIR/$PREFIX" > "$OUTDIR/$PREFIX.depletion_stats.tsv" <<'PY'
 import json, sys
-name, pj, uj = sys.argv[1:]
-p, u = json.load(open(pj)), json.load(open(uj))
-def g(d, *keys):
-    for k in keys:
-        if k in d: return d[k]
-    return "NA"
-cols = ["sample", "paired_in", "paired_out", "unpaired_in", "unpaired_out", "frac_kept"]
-pi, po = g(p, "seqs_in"), g(p, "seqs_out")
-ui, uo = g(u, "seqs_in"), g(u, "seqs_out")
-tot_in = sum(x for x in (pi, ui) if isinstance(x, int))
-tot_out = sum(x for x in (po, uo) if isinstance(x, int))
-print("\t".join(cols))
-print("\t".join(map(str, [name, pi, po, ui, uo, f"{tot_out / tot_in:.6g}" if tot_in else "NA"])))
+name, base = sys.argv[1:]
+ld = lambda s: json.load(open(f"{base}.{s}.json"))
+prim, aln = ld("counts.primary"), ld("counts.alignment_filter")
+p, u = ld("deacon.paired"), ld("deacon.unpaired")
+primary = prim["records_filter_accepted"]
+aln_removed = aln["records_filter_rejected"]
+pi, po, ui, uo = p["seqs_in"], p["seqs_out"], u["seqs_in"], u["seqs_out"]
+# every primary read must be accounted for: alignment-filtered, or sent to deacon
+assert aln["records_processed"] == primary, "alignment-filter input != primary reads"
+assert aln_removed + pi + ui == primary, (
+    f"read accounting mismatch: {aln_removed}+{pi}+{ui} != {primary}")
+cols = ["sample", "primary_reads", "aln_removed", "paired_in", "paired_out",
+        "unpaired_in", "unpaired_out", "frac_kept"]
+row = [name, primary, aln_removed, pi, po, ui, uo,
+       f"{(po + uo) / primary:.6g}" if primary else "NA"]
+print("\t".join(cols)); print("\t".join(map(str, row)))
 PY
 cat "$OUTDIR/$PREFIX.depletion_stats.tsv" >&2
 log "done"

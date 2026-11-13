@@ -25,13 +25,26 @@ def pairs(g, tag, n, L=150, ins=350):
 reads = pairs(host, "HOST", 5000) + pairs(microbe, "MICROBE", 2000)
 q = "I" * 150
 with open("r.sam", "w") as fh:
-    fh.write("@HD\tVN:1.6\tSO:unsorted\n")
+    fh.write("@HD\tVN:1.6\tSO:unsorted\n@SQ\tSN:ref\tLN:1000000\n")
     for name, r1, r2 in reads:
         fh.write(f"{name}\t77\t*\t0\t0\t*\t*\t0\t0\t{r1}\t{q}\n")
         fh.write(f"{name}\t141\t*\t0\t0\t*\t*\t0\t0\t{r2}\t{q}\n")
     # singletons: R1 present, mate absent
     for name, r1, _ in pairs(host, "HOSTSINGLE", 300) + pairs(microbe, "MICROBESINGLE", 100):
         fh.write(f"{name}\t73\t*\t0\t0\t*\t*\t0\t0\t{r1}\t{q}\n")
+    # Non-host sequence the aligner placed on the reference with both mates mapped
+    # (stands in for repetitive human reads deacon cannot see): alignment filter must drop these.
+    for i, (name, r1, r2) in enumerate(pairs(microbe, "BOTHMAPPED", 500)):
+        p = 1000 + i * 10
+        fh.write(f"{name}\t99\tref\t{p}\t60\t150M\t=\t{p+200}\t350\t{r1}\t{q}\n")
+        fh.write(f"{name}\t147\tref\t{p+200}\t60\t150M\t=\t{p}\t-350\t{r2}\t{q}\n")
+        if i < 50:  # supplementary record: must not produce a duplicate read
+            fh.write(f"{name}\t2147\tref\t{p+500}\t60\t150M\t=\t{p}\t0\t{r1}\t{q}\n")
+    # One mate mapped, one unmapped: kept by the alignment filter (as a pair).
+    for i, (name, r1, r2) in enumerate(pairs(microbe, "HALFMAPPED", 400)):
+        p = 600000 + i * 10
+        fh.write(f"{name}\t73\tref\t{p}\t60\t150M\t=\t{p}\t0\t{r1}\t{q}\n")
+        fh.write(f"{name}\t133\tref\t{p}\t0\t*\t=\t{p}\t0\t{r2}\t{q}\n")
 PY
 samtools view -b -o test.bam r.sam
 deacon index build host.fa > host.idx 2>/dev/null
@@ -51,6 +64,19 @@ check "microbe singletons kept"               "[ $ms -ge 99 ]"
 mism=$(paste <(zcat $r1 | awk 'NR%4==1{sub(/\/1$/,"",$1);print $1}') <(zcat $r2 | awk 'NR%4==1{sub(/\/2$/,"",$1);print $1}') | awk '$1!=$2' | wc -l)
 check "R1/R2 names paired"                    "[ $mism -eq 0 ]"
 check "stats TSV written"                     "[ \$(wc -l < out/t.depletion_stats.tsv) -eq 2 ]"
+
+bm=$(count $r1 BOTHMAPPED); hm1=$(count $r1 HALFMAPPED); hm2=$(count $r2 HALFMAPPED)
+echo "alignment filter: both-mapped kept=$bm/500 | half-mapped kept R1=$hm1 R2=$hm2 /400"
+check "both-mapped pairs removed by alignment filter" "[ $bm -eq 0 ]"
+check "half-mapped pairs kept as pairs"       "[ $hm1 -eq 400 ] && [ $hm2 -eq 400 ]"
+read -r prim alnrm < <(awk -F'\t' 'NR==2{print $2, $3}' out/t.depletion_stats.tsv)
+# primary reads: 2*(5000+2000+500+400) + 400 singletons = 16200; supplementary excluded
+check "primary reads counted (16200)"         "[ $prim -eq 16200 ]"
+check "aln_removed = both-mapped reads (1000)" "[ $alnrm -eq 1000 ]"
+
+deplete_host.sh -A -i test.bam -x host.idx -p noaln -o out_noaln -t 4 2> run_noaln.log
+bmA=$(count out_noaln/noaln.host_depleted.R1.fq.gz BOTHMAPPED)
+check "-A disables alignment filter (both-mapped kept)" "[ $bmA -eq 500 ]"
 
 head -c $(( $(stat -c %s test.bam) / 2 )) test.bam > trunc.bam
 if deplete_host.sh -i trunc.bam -x host.idx -p tr -o out_tr -t 2 2>/dev/null; then
