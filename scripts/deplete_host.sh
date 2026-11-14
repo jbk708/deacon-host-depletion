@@ -86,12 +86,17 @@ samtools quickcheck -u -v "$INPUT" || { echo "ERROR: samtools quickcheck failed 
 #    Reads (or mates) on non-host contigs (e.g. chrEBV) are treated as unmapped, so viral reads
 #    the aligner placed on them survive to deacon. Both mates evaluate identically
 #    (rname/rnext swap), so pairs stay intact.
+#    Only non-host contigs present in the header go into the expression: each string comparison
+#    is evaluated for every mapped record on a single thread (18 comparisons cut throughput from
+#    ~5M to ~0.3M records/s, which bottlenecked whole-genome runs).
 ALN_EXPR='1'
 if [[ $ALN_FILTER == 1 ]]; then
   ALN_EXPR='flag.unmap || flag.munmap'
+  hdr_contigs=$(samtools view -H "$INPUT" | awk -F'\t' '$1=="@SQ"{for(i=2;i<=NF;i++) if($i~/^SN:/) print substr($i,4)}')
   IFS=',' read -ra _nh <<< "$NONHOST"
   for c in "${_nh[@]}"; do
     [[ $c =~ ^[A-Za-z0-9._|-]+$ ]] || { echo "ERROR: bad contig name in -N: $c" >&2; exit 1; }
+    grep -qxF -- "$c" <<< "$hdr_contigs" || continue
     ALN_EXPR+=" || rname == \"$c\" || rnext == \"$c\""
   done
 fi

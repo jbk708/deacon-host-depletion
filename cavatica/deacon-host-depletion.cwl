@@ -16,15 +16,15 @@ requirements:
   ShellCommandRequirement: {}
   InlineJavascriptRequirement: {}
   DockerRequirement:
-    dockerPull: ghcr.io/jbk708/deacon-host-depletion:0.2.1
+    dockerPull: ghcr.io/jbk708/deacon-host-depletion:0.2.2
   ResourceRequirement:
     coresMin: $(inputs.threads)
     ramMin: 32000
 
 hints:
   - class: sbg:AWSInstanceType
-    # 16 vCPU / 32 GB, 1 TB EBS: room for a ~100 GB CRAM plus collate temp files
-    value: c5.4xlarge;ebs-gp2;1024
+    # 16 vCPU / 32 GB, 256 GB EBS: collate only spills reads that pass the alignment filter
+    value: c5.4xlarge;ebs-gp2;256
   - class: sbg:maxNumberOfParallelInstances
     value: 1
 
