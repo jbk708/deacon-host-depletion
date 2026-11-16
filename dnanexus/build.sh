@@ -21,5 +21,5 @@ chmod 644 "$res/opt/deacon-env.tar.gz"
 ls -lh "$res/opt/deacon-env.tar.gz"
 
 if [[ ${1:-} == --build ]]; then
-  dx build "$app" --overwrite
+  dx build "$app" --overwrite --destination "${DX_APPLET_DEST:-/applets/}"
 fi
