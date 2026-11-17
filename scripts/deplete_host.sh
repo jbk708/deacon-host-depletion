@@ -80,7 +80,10 @@ samtools quickcheck -u -v "$INPUT" || { echo "ERROR: samtools quickcheck failed 
 #    duplicates and QC-fail reads are kept on purpose (microbial reads are often flagged as dups).
 #    Counts of primary reads and of reads dropped by the alignment filter go to JSON.
 # 1) alignment filter: keep a record only if it or its mate is unmapped.
-# 2) collate mates (fast mode), 3) FASTQ, 4) deacon deplete.
+# 2) collate mates, 3) FASTQ, 4) deacon deplete.
+#    Not `collate -f`: fast mode silently drops records without the paired flag (single-end reads
+#    that some CBTN CRAMs carry), which the read-accounting check below caught (up to 1.2% of the
+#    reads passing the alignment filter). Collate only sees filtered reads, so default mode is cheap.
 #    samtools fastq: paired READ1/READ2 -> stdout (interleaved, /1 /2 suffixes),
 #    singletons -> -s, reads flagged neither/both READ1/READ2 -> -0.
 #    Reads (or mates) on non-host contigs (e.g. chrEBV) are treated as unmapped, so viral reads
@@ -105,7 +108,7 @@ log "extracting + depleting paired reads"
 samtools view -@ "$THREADS" -u -F 0x900 "${REF_OPT[@]}" \
     --save-counts "$OUTDIR/$PREFIX.counts.primary.json" "$INPUT" \
   | samtools view -u -e "$ALN_EXPR" --save-counts "$OUTDIR/$PREFIX.counts.alignment_filter.json" - \
-  | samtools collate -@ "$THREADS" -f -r 100000 -O -u - "$TMPD/collate" \
+  | samtools collate -@ "$THREADS" -O -u - "$TMPD/collate" \
   | samtools fastq -@ "$THREADS" "${REF_OPT[@]}" \
       -s "$TMPD/singletons.fq.gz" -0 "$TMPD/other.fq.gz" - \
   | deacon filter --deplete --interleaved --check-pairs \

@@ -16,7 +16,7 @@ requirements:
   ShellCommandRequirement: {}
   InlineJavascriptRequirement: {}
   DockerRequirement:
-    dockerPull: ghcr.io/jbk708/deacon-host-depletion:0.2.2
+    dockerPull: ghcr.io/jbk708/deacon-host-depletion:0.2.3
   ResourceRequirement:
     coresMin: $(inputs.threads)
     ramMin: 32000
