@@ -82,7 +82,14 @@ dx run deacon_host_depletion -iinput_reads=file-xxx -ideacon_index=file-yyy --de
 # Batch: dx run deacon_host_depletion --batch-tsv batch.tsv -ideacon_index=file-yyy
 ```
 
-Default instance: `azure:mem2_ssd1_x16` (16 cores, 56 GB, 512 GB disk). The job checks free disk before downloading (input × 1.3) and fails fast; BAMs over ~390 GB need `--instance-type azure:mem4_ssd1_x32`.
+By default (`-istream=true`, v0.3.0+) the job reads the BAM/CRAM in place through a read-only
+[dxfuse](https://github.com/dnanexus/dxfuse) mount (v1.6.1, bundled and checksummed by `build.sh`)
+instead of downloading it: reading overlaps with processing and local disk only holds collate temp files
+and outputs. Default instance: `azure:mem1_ssd1_x16` (16 cores, 31 GB, 256 GB disk). Samples that keep a
+very large fraction of reads (tens of GB of FASTQ) may need a larger disk, e.g. `azure:mem2_ssd1_x16`.
+
+`-istream=false` restores the v0.2 behaviour (download first; the job checks free disk for input × 1.3
+and fails fast; use `azure:mem2_ssd1_x16`, or `azure:mem4_ssd1_x32` for BAMs over ~390 GB).
 
 ## Cavatica
 

@@ -3,7 +3,7 @@
   "title": "deacon host depletion (BAM/CRAM -> host-depleted FASTQ)",
   "summary": "Extract all reads from a BAM/CRAM, re-pair mates, and remove host reads with deacon",
   "dxapi": "1.0.0",
-  "version": "0.2.2",
+  "version": "0.3.0",
   "inputSpec": [
     {
       "name": "input_reads",
@@ -42,6 +42,13 @@
         "*.fasta.gz",
         "*.fna"
       ]
+    },
+    {
+      "name": "stream",
+      "label": "Stream input via dxfuse",
+      "class": "boolean",
+      "default": true,
+      "help": "Read the BAM/CRAM in place through a read-only dxfuse mount instead of downloading it (less disk, no copy time). Set false to download first."
     },
     {
       "name": "output_prefix",
@@ -117,14 +124,14 @@
     "azure:westus": {
       "systemRequirements": {
         "main": {
-          "instanceType": "azure:mem2_ssd1_x16"
+          "instanceType": "azure:mem1_ssd1_x16"
         }
       }
     },
     "aws:us-east-1": {
       "systemRequirements": {
         "main": {
-          "instanceType": "mem2_ssd1_v2_x16"
+          "instanceType": "mem1_ssd1_v2_x16"
         }
       }
     }
